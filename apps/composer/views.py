@@ -24,6 +24,7 @@ from django.utils.html import strip_tags
 from django.utils.text import get_text_list
 from django.views.decorators.http import require_GET, require_POST
 
+from apps.composer.services import approval_gate_allows_schedule
 from apps.common.validators import (
     is_safe_url,
     parse_and_truncate_tag_string,
@@ -865,6 +866,28 @@ def compose(request, workspace_id, post_id=None):
     return render(request, "composer/compose.html", context)
 
 
+_APPROVAL_REQUIRED_MSG = (
+    "This workspace requires approval before scheduling. "
+    "Submit the post for approval and schedule it once it is approved."
+)
+
+
+def _approval_gate_blocks_targets(post, only_ids=None):
+    """Whether the approval workflow forbids scheduling the targeted children.
+
+    Every targeted child must be ``approved`` — the only status carrying the
+    sign-offs a required-approval mode promises. No targeted children at all
+    also blocks: scheduling nothing would silently no-op.
+    """
+    if approval_gate_allows_schedule(post.workspace, "draft"):
+        return False
+    qs = post.platform_posts.all()
+    if only_ids is not None:
+        qs = qs.filter(id__in=only_ids)
+    targeted = list(qs)
+    return not targeted or any(pp.status != "approved" for pp in targeted)
+
+
 def _transition_post_children(post, target, *, allow_via_draft=True, only=None):
     """Transition every (or selected) PlatformPost child of *post* to *target*.
 
@@ -884,6 +907,13 @@ def _transition_post_children(post, target, *, allow_via_draft=True, only=None):
     for pp in children:
         if pp.status == target:
             moved.append(pp)
+            continue
+        # Approval workflow: under a required-approval mode only an approved
+        # child may enter the publisher's path, whichever button or endpoint
+        # initiated the move. Skipped (not raised) so a mixed-state post keeps
+        # its partial result visible to the caller.
+        if target in ("scheduled", "publishing") and not approval_gate_allows_schedule(post.workspace, pp.status):
+            skipped.append(pp)
             continue
         try:
             if pp.can_transition_to(target):
@@ -1048,7 +1078,11 @@ def save_post(request, workspace_id, post_id=None):
             # selected platforms publish at the same moment.
             post._schedule_propagate_dt = aware_dt  # handled after post.save()
             pending_target = "scheduled"
-            initial_status = "scheduled"
+            # Under a required-approval mode new children must be born as
+            # drafts: birthing them directly in ``scheduled`` would bypass the
+            # approval gate enforced below, which refuses the action until the
+            # post carries the required approvals.
+            initial_status = "draft" if not approval_gate_allows_schedule(workspace, "draft") else "scheduled"
         else:
             return JsonResponse({"errors": {"schedule": "Date and time required."}}, status=400)
     elif action == "publish_now":
@@ -1062,7 +1096,8 @@ def save_post(request, workspace_id, post_id=None):
         post.proposed_publish_at = None
         post._schedule_propagate_dt = now_dt  # handled after post.save()
         pending_target = "scheduled"
-        initial_status = "scheduled"
+        # Same approval-gate rule as ``schedule``: new children start as drafts.
+        initial_status = "draft" if not approval_gate_allows_schedule(workspace, "draft") else "scheduled"
     elif action == "add_to_queue":
         from django.db import transaction
 
@@ -1078,6 +1113,8 @@ def save_post(request, workspace_id, post_id=None):
         # Ensure PlatformPost rows exist for every selected account before the
         # queue service writes per-platform scheduled_at values.
         _sync_platform_posts(request, post, workspace, initial_status="draft")
+        if _approval_gate_blocks_targets(post, _scoped_platform_post_ids(request, post)):
+            return JsonResponse({"errors": {"approval": _APPROVAL_REQUIRED_MSG}}, status=400)
         # "Next Available" always places the post in the queue's soonest open
         # slot. It deliberately ignores the Schedule-panel date/time: those
         # inputs are prefilled from the post's own scheduled_at/proposed time
@@ -1117,6 +1154,8 @@ def save_post(request, workspace_id, post_id=None):
         post.proposed_publish_at = None
         post.save()
         _sync_platform_posts(request, post, workspace, initial_status="draft")
+        if _approval_gate_blocks_targets(post, _scoped_platform_post_ids(request, post)):
+            return JsonResponse({"errors": {"approval": _APPROVAL_REQUIRED_MSG}}, status=400)
         try:
             # One transaction across every queue (see add_to_queue above).
             with transaction.atomic():
@@ -1268,6 +1307,8 @@ def save_post(request, workspace_id, post_id=None):
             target_only = [pid for pid in candidates if str(pid) not in reverted_ids]
         else:
             target_only = scoped_ids
+        if pending_target in ("scheduled", "publishing") and _approval_gate_blocks_targets(post, target_only):
+            return JsonResponse({"errors": {"approval": _APPROVAL_REQUIRED_MSG}}, status=400)
         _transition_post_children(post, pending_target, only=target_only)
 
     # Save version
@@ -1321,6 +1362,9 @@ def transition_platform_post(request, workspace_id, post_id, platform_post_id):
         raise PermissionDenied("You do not have permission to schedule this post.")
     if target in approval_states and not perms.get("approve_posts", False) and target != "pending_review":
         raise PermissionDenied("You do not have permission to make approval decisions.")
+
+    if target in ("scheduled", "publishing") and not approval_gate_allows_schedule(workspace, pp.status):
+        return JsonResponse({"error": _APPROVAL_REQUIRED_MSG}, status=400)
 
     if pp.status == target:
         return JsonResponse({"ok": True, "status": pp.status, "noop": True})

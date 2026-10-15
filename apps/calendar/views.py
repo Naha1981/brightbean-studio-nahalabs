@@ -1107,7 +1107,7 @@ def publish_tab_sent(request, workspace_id):
 @require_POST
 def reschedule_post(request, workspace_id):
     """HTMX endpoint for drag-and-drop rescheduling of a single PlatformPost."""
-    from apps.composer.services import require_publishable, sync_post_scheduled_at
+    from apps.composer.services import approval_gate_allows_schedule, require_publishable, sync_post_scheduled_at
 
     workspace = _get_workspace(request, workspace_id)
     platform_post_id = request.POST.get("platform_post_id") or request.POST.get("post_id")
@@ -1140,6 +1140,11 @@ def reschedule_post(request, workspace_id):
     # than silently degrading the drop to a time-only move.
     if pp.status in _IMPLICIT_SCHEDULE_STATUSES and not perms.get("publish_directly", False):
         return JsonResponse({"error": "You do not have permission to schedule this post."}, status=403)
+    # A required-approval mode also gates the implicit promotion: only a child
+    # that already carries the required sign-offs (status ``approved``) may be
+    # dropped into the publisher's path.
+    if pp.status in _IMPLICIT_SCHEDULE_STATUSES and not approval_gate_allows_schedule(workspace, pp.status):
+        return JsonResponse({"error": "This workspace requires approval before scheduling."}, status=400)
     # The same drop hands the row to the publisher, so refuse one that can only
     # fail there — an image-only TikTok draft, a pin with no board or image.
     # Checked out here because the ValueError handler below would report it as
@@ -1276,7 +1281,12 @@ def bulk_platform_action(request, workspace_id):
     from django.db.models.functions import Coalesce
     from django.utils import timezone as _tz
 
-    from apps.composer.services import media_types_by_post, require_publishable, sync_post_scheduled_at
+    from apps.composer.services import (
+        approval_gate_allows_schedule,
+        media_types_by_post,
+        require_publishable,
+        sync_post_scheduled_at,
+    )
 
     workspace = _get_workspace(request, workspace_id)
     action = request.POST.get("action")
@@ -1314,6 +1324,19 @@ def bulk_platform_action(request, workspace_id):
         # Rows already ``scheduled`` are left alone — they were committed
         # before, and publishing now only moves them in time.
         promoting = [pp for pp in pps if _promotes_to_scheduled(pp)]
+        # Required-approval mode: bulk publish is still publishing — only rows
+        # carrying the required sign-offs may move into the publisher's path.
+        if not approval_gate_allows_schedule(workspace, "draft"):
+            unapproved = sum(1 for pp in promoting if pp.status != "approved")
+            if unapproved:
+                noun = "post is" if unapproved == 1 else "posts are"
+                return JsonResponse(
+                    {
+                        "error": f"{unapproved} selected {noun} not approved, so nothing was published. "
+                        "This workspace requires approval before publishing."
+                    },
+                    status=400,
+                )
         media_by_post = media_types_by_post({pp.post_id for pp in promoting})
         blocked = []
         for pp in promoting:

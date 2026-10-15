@@ -261,7 +261,10 @@ def transition_platform_post(
     # MCP transition tool, the composer's HTMX `transition_platform_post`
     # view) is covered.
     if target_status == "scheduled":
-        _require_approval_gate_passes(platform_post.post.workspace)
+        # Status-aware gate: an existing child may schedule only from
+        # ``approved`` under a required-approval mode (drafts and every
+        # other pre-approval state are refused here, just like new posts).
+        _require_approval_gate_passes(platform_post.post.workspace, platform_post.status)
         require_publishable(platform_post)
 
     with transaction.atomic():
@@ -375,17 +378,34 @@ def clone_post(post, *, author=None):
 _APPROVAL_MODES_BLOCKING_DIRECT_SCHEDULE = frozenset({"required_internal", "required_internal_and_client"})
 
 
-def _require_approval_gate_passes(workspace) -> None:
-    """Raise ``ValueError`` if the workspace forbids direct scheduling.
+def approval_gate_allows_schedule(workspace, from_status) -> bool:
+    """Whether a PlatformPost in ``from_status`` may move into the publish path.
+
+    Under the blocking approval modes the only legitimate source state is
+    ``approved`` — the one status that carries every sign-off the mode
+    requires (internal review, plus client approval in the two-stage mode).
+    ``from_status=None`` (a post being created directly in ``scheduled``)
+    never qualifies. With the gate off (``none`` / ``optional`` modes) every
+    state may schedule.
+    """
+    if getattr(workspace, "approval_workflow_mode", "none") not in _APPROVAL_MODES_BLOCKING_DIRECT_SCHEDULE:
+        return True
+    return from_status == "approved"
+
+
+def _require_approval_gate_passes(workspace, from_status=None) -> None:
+    """Raise ``ValueError`` if the workspace's approval mode forbids this schedule.
 
     Drafts are always allowed (they're explicit save-for-later);
     scheduling implies "ready to publish," which is exactly what the
-    approval workflow gates.
+    approval workflow gates. A brand-new post has no approvals by
+    definition, so creating it directly in ``scheduled`` is refused; an
+    existing child may only be scheduled from ``approved``.
     """
-    if getattr(workspace, "approval_workflow_mode", "none") in _APPROVAL_MODES_BLOCKING_DIRECT_SCHEDULE:
+    if not approval_gate_allows_schedule(workspace, from_status):
         raise ValueError(
             "Workspace requires approval before scheduling; create the post as a "
-            "draft and route it through the approval workflow."
+            "draft, route it through the approval workflow, and schedule it once approved."
         )
 
 

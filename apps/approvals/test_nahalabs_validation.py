@@ -75,3 +75,27 @@ class NahaLabsValidation(ApprovalWorkflowBase):
         membership.delete()
         response=portal.get(reverse('client_portal:approval_queue'))
         self.assertRedirects(response,reverse('client_portal:magic_link_expired'))
+
+    def test_manager_can_schedule_after_full_approval(self):
+        """Positive path: once internal + client approvals are in, scheduling works."""
+        client_user=_make_user('synthetic-client2@example.invalid')
+        WorkspaceMembership.objects.create(user=client_user,workspace=self.ws,workspace_role='client')
+        post=self._post('draft')
+        services.submit_for_review(post,self.author,self.ws)
+        services.approve_post(post,self.reviewer,self.ws)
+        self.assertEqual(post.platform_posts.get().status,'pending_client')
+        token=MagicLinkToken.objects.create(user=client_user,workspace=self.ws)
+        portal=Client()
+        portal.post(reverse('client_portal:magic_link_entry',kwargs={'token':token.token}))
+        portal.post(reverse('client_portal:approve',kwargs={'post_id':post.id}))
+        self.assertEqual(post.platform_posts.get().status,'approved')
+        self.client.force_login(self.reviewer)
+        tomorrow = timezone.now() + timedelta(days=1)
+        response = self.client.post(reverse('composer:save_post_edit',kwargs={'workspace_id': self.ws.id,'post_id':post.id}), {
+            'action':'schedule', 'caption':'Original caption', 'selected_accounts':str(self.account.id),
+            'scheduled_date':tomorrow.date().isoformat(), 'scheduled_time':'12:00',
+        })
+        from apps.composer.models import PlatformPost
+        states=list(PlatformPost.objects.filter(post=post).values_list('status',flat=True))
+        print('QA_POSITIVE',response.status_code,states)
+        self.assertIn('scheduled',states)
