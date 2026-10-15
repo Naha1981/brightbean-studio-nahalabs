@@ -1,10 +1,14 @@
 """Disposable NahaLabs QA deployment only, 2026-10-15.
 AGPL-3.0, source: https://github.com/Naha1981/brightbean-studio-nahalabs
-No publishing worker, no outbound mail, no durable data. Never use real clients.
+The publishing worker runs in-process beside gunicorn (single Render web
+service, no paid worker dyno). No outbound mail, no durable data.
+Never use real clients.
 """
 import os
 import subprocess
 import sys
+import threading
+import time
 
 subprocess.run([sys.executable, 'manage.py', 'migrate', '--noinput'], check=True)
 # Idempotent across a restart that retains /tmp. No credential is logged.
@@ -21,4 +25,28 @@ if created:
     user.set_password(os.environ['DJANGO_SUPERUSER_PASSWORD'])
     user.save()
 EmailAddress.objects.update_or_create(user=user,email=email,defaults={'verified':True,'primary':True})
+
+
+def _worker_loop():
+    """Keep one studio worker alive for the life of the QA container.
+
+    run_studio_worker recycles itself hourly (--duration 3600, same as the
+    Procfile); the loop simply starts the next instance. A crash is retried
+    after a short backoff instead of silently leaving QA with no publisher.
+    The thread is a daemon and os.execvp replaces this process with
+    gunicorn, so Render's container stop kills the worker with the web.
+    """
+    while True:
+        try:
+            subprocess.run(
+                [sys.executable, 'manage.py', 'run_studio_worker', '--duration', '3600'],
+                check=False,
+            )
+        except Exception:
+            pass
+        time.sleep(5)
+
+
+threading.Thread(target=_worker_loop, daemon=True, name='studio-worker-supervisor').start()
+
 os.execvp('gunicorn', ['gunicorn','config.wsgi:application','--bind','0.0.0.0:'+os.environ.get('PORT','8000'),'--workers','1','--threads','4'])
