@@ -207,6 +207,7 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body class="text-gray-900 min-h-screen" style="background: var(--surface-page);">
+<div style="background:#fff3cd;color:#5b4100;padding:12px;text-align:center;font:14px system-ui;position:relative;z-index:9999">NahaLabs disposable QA demo. Fake data only. Data can disappear on restart. Publishing and email are disabled. <a href="https://github.com/Naha1981/brightbean-studio-nahalabs" style="text-decoration:underline">AGPL source</a></div>
     {% csrf_token %}
     <script nonce="{{ request.csp_nonce }}">
         document.body.addEventListener('htmx:configRequest', function(event) {
