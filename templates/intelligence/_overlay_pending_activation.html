@@ -1,9 +1,9 @@
 {% comment %}
   Inline banner for admins (closed-tab recovery): Stripe webhook fired
-  and Intelligence persisted a PendingStudioActivation, but Studio
+  and Intelligence persisted a pending activation record, but NahaLabs
   never saw the activate redirect (user closed the tab mid-payment or
   the success_url didn't fire). Single click runs the recovery flow —
-  Studio's /recover/ endpoint pulls the session_id from Intelligence
+  NahaLabs's /recover/ endpoint pulls the session_id from Intelligence
   and walks the two-phase activation. The playground below stays
   faded but interactive (preview mode) until the recovery completes.
 {% endcomment %}

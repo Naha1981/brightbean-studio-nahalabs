@@ -458,7 +458,7 @@ def calculated_metrics_note(
     calculated.append("% changes vs. the previous period")
     listed = get_text_list(calculated, "and")
     return (
-        f"Underlying data comes from {platform}. The {listed} are calculated by BrightBean, not reported by {platform}."
+        f"Underlying data comes from {platform}. The {listed} are calculated by NahaLabs, not reported by {platform}."
     )
 
 

@@ -119,15 +119,15 @@ def sidebar_context(request):
     # in any of their workspaces, so pages without a workspace (settings,
     # members) don't make it flicker in and out. Closing it lasts until the
     # next login.
-    show_review_banner = False
+    show_review_banner = False  # Trustpilot ask disabled: no NahaLabs review page exists (white-label)
     dismissed_at = request.user.review_banner_dismissed_at
     last_login = request.user.last_login
     if dismissed_at is None or (last_login is not None and last_login > dismissed_at):
-        show_review_banner = bool(sidebar_channels) or (
+        show_review_banner = False and (bool(sidebar_channels) or (
             SocialAccount.objects.filter(
                 workspace_id__in=[ws.id for ws in sidebar_workspaces],
                 connection_status=SocialAccount.ConnectionStatus.CONNECTED,
-            ).exists()
+            ).exists())
         )
 
     return {
