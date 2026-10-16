@@ -1,5 +1,5 @@
 """NahaLabs PRODUCTION deployment, 2026-10-16. Durable Postgres (DATABASE_URL), real client workspaces.
-AGPL-3.0, source: https://github.com/Naha1981/brightbean-studio-nahalabs
+AGPL-3.0, source: https://github.com/Naha1981/nahalabs-growth-service
 The publishing worker runs in-process beside gunicorn (single Render web
 service, no paid worker dyno). Data is durable Postgres. Outbound email stays off until Resend is wired (EMAIL_BACKEND_TYPE=dummy).
 """
@@ -26,6 +26,9 @@ if created:
 EmailAddress.objects.update_or_create(user=user,email=email,defaults={'verified':True,'primary':True})
 
 
+WORKER_ENABLED = os.environ.get('WORKER_ENABLED', 'true') != 'false'
+
+
 def _worker_loop():
     """Keep one studio worker alive for the life of the QA container.
 
@@ -46,6 +49,7 @@ def _worker_loop():
         time.sleep(5)
 
 
-threading.Thread(target=_worker_loop, daemon=True, name='studio-worker-supervisor').start()
+if WORKER_ENABLED:
+    threading.Thread(target=_worker_loop, daemon=True, name='studio-worker-supervisor').start()
 
 os.execvp('gunicorn', ['gunicorn','config.wsgi:application','--bind','0.0.0.0:'+os.environ.get('PORT','8000'),'--workers','1','--threads','4'])
