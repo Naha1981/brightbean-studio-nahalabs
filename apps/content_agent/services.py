@@ -91,7 +91,7 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
     api_key = getattr(settings, "CONTENT_AGENT_GEMINI_API_KEY", "") or ""
     if not api_key:
         raise RuntimeError("CONTENT_AGENT_GEMINI_API_KEY is not set")
-    model = getattr(settings, "CONTENT_AGENT_GEMINI_MODEL", "gemini-2.5-flash")
+    model = getattr(settings, "CONTENT_AGENT_GEMINI_MODEL", "gemini-3.8-flash")
     niche = config.niche or "local restaurant"
     drafts: list[Draft] = []
     http = client or httpx.Client(timeout=DEFAULT_GEMINI_TIMEOUT)
@@ -103,14 +103,21 @@ def draft_posts(config, topics: list[str], *, client=None) -> list[Draft]:
             'Reply with JSON only: {"caption": "...", "hashtags": ["#tag", ...]}'
         )
         try:
-            resp = http.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                params={"key": api_key},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json"},
-                },
-            )
+            # Free-tier Gemini is contended: 429/503 are routine, so retry a
+            # few times with backoff before declaring the topic failed.
+            resp = None
+            for attempt in range(4):
+                resp = http.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    params={"key": api_key},
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"responseMimeType": "application/json"},
+                    },
+                )
+                if resp.status_code not in (429, 503):
+                    break
+                time.sleep(3 * (attempt + 1))
             resp.raise_for_status()
             payload = resp.json()
             text = payload["candidates"][0]["content"]["parts"][0]["text"]
