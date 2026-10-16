@@ -13,6 +13,8 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+import time
+
 import httpx
 from django.conf import settings
 from django.utils import timezone
