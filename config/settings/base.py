@@ -84,6 +84,7 @@ LOCAL_APPS = [
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
+    "apps.common.host_redirect.CanonicalHostRedirectMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -319,6 +320,10 @@ SESSION_SAVE_EVERY_REQUEST = True  # Sliding window
 
 # Email
 EMAIL_BACKEND_TYPE = env("EMAIL_BACKEND_TYPE")
+
+# Legacy deployments 301 to the canonical host when this is set (see
+# apps/common/host_redirect.py). Empty = serve normally.
+CANONICAL_HOST_REDIRECT = env("CANONICAL_HOST_REDIRECT", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="noreply@localhost")
 
 # Everything outbound goes through the budget wrapper, which then hands the
