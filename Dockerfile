@@ -44,4 +44,4 @@ EXPOSE 8000
 # same request without it returned 200. Uploads here are allowed up to 1 GB, so
 # no fixed timeout makes recycling safe. The RSS ratchet it was guarding against
 # is fixed at the source instead (AWS_S3_MAX_MEMORY_SIZE + streaming reads).
-CMD gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 1 --threads 4
+CMD ["sh", "bin/start-web.sh"]
