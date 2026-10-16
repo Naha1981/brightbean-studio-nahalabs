@@ -66,6 +66,7 @@ LOCAL_APPS = [
     "apps.approvals",
     "apps.client_portal",
     "apps.onboarding",
+    "apps.content_agent",
     # Always installed (migrations consistent across deployments). URLs +
     # templates short-circuit when ``settings.INTELLIGENCE_ENABLED`` is False,
     # so self-hosters who don't set the Intelligence env vars get no
@@ -662,6 +663,13 @@ OAUTH2_PROVIDER = {
 # any one → INTELLIGENCE_ENABLED is False and the entire surface is hidden:
 # no left-nav item, no /orgs/<id>/intelligence/ URLs, no /intelligence/
 # routes. Self-hosters who don't set these get vanilla OSS Studio.
+# Content agent (drafts into the review queue only; never approves/schedules).
+# Off everywhere unless explicitly enabled - production stays untouched.
+CONTENT_AGENT_ENABLED = env("CONTENT_AGENT_ENABLED", default="false").lower() == "true"
+CONTENT_AGENT_SEARXNG_URL = env("CONTENT_AGENT_SEARXNG_URL", default="")
+CONTENT_AGENT_GEMINI_API_KEY = env("CONTENT_AGENT_GEMINI_API_KEY", default="")
+CONTENT_AGENT_GEMINI_MODEL = env("CONTENT_AGENT_GEMINI_MODEL", default="gemini-2.5-flash")
+
 INTELLIGENCE_INTERNAL_URL = env("INTELLIGENCE_INTERNAL_URL", default="")
 INTELLIGENCE_PUBLIC_URL = env("INTELLIGENCE_PUBLIC_URL", default="")
 STUDIO_DEPLOYMENT_ID = env("STUDIO_DEPLOYMENT_ID", default="")
