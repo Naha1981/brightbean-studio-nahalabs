@@ -292,8 +292,12 @@ GOOGLE_AUTH_CLIENT_SECRET = env("GOOGLE_AUTH_CLIENT_SECRET", default="")
 # Unsplash stock-photo search in the composer (optional; empty disables the feature)
 UNSPLASH_ACCESS_KEY = env("UNSPLASH_ACCESS_KEY", default="")
 
-SOCIALACCOUNT_PROVIDERS = {
-    "google": {
+# Google social login is only advertised when real OAuth credentials are
+# configured; an empty client_id otherwise surfaces a broken "Log in with
+# Google" button that dies on Google's 400 invalid_request.
+SOCIALACCOUNT_PROVIDERS = {}
+if GOOGLE_AUTH_CLIENT_ID:
+    SOCIALACCOUNT_PROVIDERS["google"] = {
         "APP": {
             "client_id": GOOGLE_AUTH_CLIENT_ID,
             "secret": GOOGLE_AUTH_CLIENT_SECRET,
@@ -301,8 +305,7 @@ SOCIALACCOUNT_PROVIDERS = {
         "SCOPE": ["profile", "email"],
         "AUTH_PARAMS": {"access_type": "online"},
         "VERIFIED_EMAIL": True,
-    },
-}
+    }
 
 SOCIALACCOUNT_EMAIL_AUTHENTICATION = True
 SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = True
