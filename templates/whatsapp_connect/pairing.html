@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block page_title %}Pair WhatsApp{% endblock %}
+{% block content %}
+<div class="max-w-lg">
+    <h2 class="text-xl font-semibold text-stone-900 mb-2">Enter this code in WhatsApp</h2>
+    <p class="text-sm text-stone-500 mb-6">On the phone with number +{{ connection.phone_number }}: open WhatsApp &rarr; Settings &rarr; Linked devices &rarr; Link a device &rarr; <b>Link with phone number instead</b>, then type this code:</p>
+
+    <div class="p-6 mb-6 bg-white border-2 border-stone-200 rounded-2xl text-center">
+        <p class="text-3xl font-mono font-bold tracking-[0.3em] text-stone-900" id="pairing-code">{{ connection.pairing_code }}</p>
+    </div>
+
+    <p class="text-sm text-stone-500 mb-2" id="status-line">Waiting for the phone to connect&hellip;</p>
+    <div class="w-full bg-stone-200 rounded-full h-1.5 mb-6 overflow-hidden"><div class="bg-orange-500 h-1.5 rounded-full animate-pulse" style="width: 45%"></div></div>
+
+    <a href="{% url 'whatsapp_connect:connect' workspace_id=workspace_id %}" class="text-sm font-semibold text-stone-600 hover:text-stone-800">Back to WhatsApp connections</a>
+</div>
+<script>
+(function () {
+    const url = "{% url 'whatsapp_connect:status_json' workspace_id=workspace_id pk=connection.pk %}";
+    const line = document.getElementById("status-line");
+    let tries = 0;
+    const timer = setInterval(async function () {
+        tries += 1;
+        try {
+            const r = await fetch(url, {headers: {"X-Requested-With": "XMLHttpRequest"}});
+            const data = await r.json();
+            if (data.status === "connected") {
+                line.textContent = "Connected! WhatsApp is linked to this workspace.";
+                line.className = "text-sm font-semibold text-green-700 mb-2";
+                clearInterval(timer);
+            } else if (data.status === "disconnected" || data.status === "failed") {
+                line.textContent = "Pairing did not finish. Go back and request a new code.";
+                line.className = "text-sm font-semibold text-red-600 mb-2";
+                clearInterval(timer);
+            }
+        } catch (e) { /* keep polling; transient network */ }
+        if (tries > 120) { clearInterval(timer); line.textContent = "Still waiting. You can leave this page open and come back."; }
+    }, 5000);
+})();
+</script>
+{% endblock %}

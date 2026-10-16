@@ -67,6 +67,7 @@ LOCAL_APPS = [
     "apps.client_portal",
     "apps.onboarding",
     "apps.content_agent",
+    "apps.whatsapp_connect",
     # Always installed (migrations consistent across deployments). URLs +
     # templates short-circuit when ``settings.INTELLIGENCE_ENABLED`` is False,
     # so self-hosters who don't set the Intelligence env vars get no
@@ -663,6 +664,10 @@ OAUTH2_PROVIDER = {
 # any one → INTELLIGENCE_ENABLED is False and the entire surface is hidden:
 # no left-nav item, no /orgs/<id>/intelligence/ URLs, no /intelligence/
 # routes. Self-hosters who don't set these get vanilla OSS Studio.
+# WhatsApp pairing via the self-hosted Evolution API (pairing codes, no Meta).
+EVOLUTION_API_URL = env("EVOLUTION_API_URL", default="")
+EVOLUTION_API_KEY = env("EVOLUTION_API_KEY", default="")
+
 # Content agent (drafts into the review queue only; never approves/schedules).
 # Off everywhere unless explicitly enabled - production stays untouched.
 CONTENT_AGENT_ENABLED = env("CONTENT_AGENT_ENABLED", default="false").lower() == "true"

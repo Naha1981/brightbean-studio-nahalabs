@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block page_title %}Connect WhatsApp{% endblock %}
+{% block content %}
+<div class="max-w-lg">
+    <div class="mb-8">
+        <a href="{% url 'social_accounts:connect' workspace_id=workspace_id %}" class="inline-flex items-center gap-1.5 text-sm text-stone-500 hover:text-stone-700 transition-colors mb-4">&larr; Back</a>
+        <h2 class="text-xl font-semibold text-stone-900 mb-2">Connect WhatsApp</h2>
+        <p class="text-sm text-stone-500">Pair the business WhatsApp number with a code. You will enter the code in the WhatsApp app on the phone that has the number - like linking WhatsApp Web.</p>
+    </div>
+
+    {% if connections %}
+    <div class="mb-8 space-y-3">
+        {% for c in connections %}
+        <div class="flex items-center justify-between p-4 bg-white border-2 border-stone-200 rounded-xl">
+            <div>
+                <p class="text-sm font-semibold text-stone-900">+{{ c.phone_number }}</p>
+                <p class="text-xs text-stone-500">{{ c.get_status_display }}</p>
+            </div>
+            {% if c.status != "disconnected" %}
+            <form method="post" action="{% url 'whatsapp_connect:disconnect' workspace_id=workspace_id pk=c.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="text-xs font-semibold text-red-600 hover:text-red-700">Disconnect</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="space-y-5">
+        {% csrf_token %}
+        <div>
+            <label for="phone" class="block text-sm font-semibold text-stone-700 mb-1.5">Business WhatsApp number</label>
+            <input type="tel" id="phone" name="phone" placeholder="27 82 000 0000" required
+                   class="w-full px-4 py-2.5 text-sm border-2 border-stone-200 rounded-xl bg-white text-stone-900 placeholder-stone-400 focus:border-orange-500 focus:ring-0 focus:outline-none transition-colors">
+            <p class="text-xs text-stone-400 mt-1.5">Full number with country code (South Africa: 27...)</p>
+        </div>
+        <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-orange-500 rounded-full shadow hover:bg-orange-600 transition-all cursor-pointer">
+            Get pairing code
+        </button>
+    </form>
+</div>
+{% endblock %}
